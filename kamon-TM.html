@@ -1,108 +1,103 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>AI図形検出（丸・四角・三角）</title>
-<style>
-  body { font-family: sans-serif; margin: 20px; text-align: center; }
-  canvas { border: 1px solid #ccc; max-width: 90%; height: auto; margin-top: 10px; }
-  #status { font-weight: bold; margin: 10px 0; }
-</style>
+  <meta charset="utf-8">
+  <title>家紋分類サイト（Teachable Machine + OpenCV.js）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif; background:#111; color:#eee; text-align:center; margin:2rem;}
+    h1 { font-size:2rem; margin-bottom:0.5rem;}
+    #status { margin:1rem 0; color:#aaa;}
+    input[type=file]{margin:1rem;}
+    canvas{margin-top:1rem; max-width:90%; border:1px solid #444;}
+    .result{margin-top:1rem; font-size:1.2rem;}
+  </style>
 </head>
+
 <body>
-<h1>🔵 AIで図形を検出！</h1>
-<p>Teachable Machineで学習した「丸・四角・三角・なし」モデルを使って、画像中の図形を自動でマークします。</p>
+  <h1>🏯 家紋分類サイト</h1>
+  <p>画像をアップロードすると、AIが <b>丸・四角・三角・なし</b> のいずれかを判定します。</p>
 
-<p id="status">⏳ モデル読み込み中...</p>
-<input type="file" id="file" accept="image/*"><br>
-<canvas id="canvas"></canvas>
+  <p id="status">⏳ モデル読み込み中...</p>
+  <input type="file" id="file" accept="image/*">
+  <canvas id="canvas"></canvas>
+  <div class="result" id="result"></div>
 
-<!-- TensorFlow.js & Teachable Machine -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image"></script>
+  <!-- ✅ TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
 
-<script>
-const MODEL_URL = "https://teachablemachine.withgoogle.com/models/JssL1cK-Y/"; // ←ここを自分のURLに！
-let tmModel;
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const fileInput = document.getElementById("file");
-const statusEl = document.getElementById("status");
+  <!-- ✅ Teachable Machine（ブラウザ用dist版） -->
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
 
-// ===== モデル読み込み =====
-async function loadModel() {
-  const modelURL = MODEL_URL + "model.json";
-  const metadataURL = MODEL_URL + "metadata.json";
-  try {
-    tmModel = await tmImage.load(modelURL, metadataURL);
-    statusEl.textContent = "✅ モデル読み込み完了！画像を選んでください。";
-  } catch (err) {
-    statusEl.textContent = "❌ モデルの読み込みに失敗しました。URLを確認してください。";
-    console.error(err);
-  }
-}
+  <!-- ✅ OpenCV.js（optional、読み込み可視化つき） -->
+  <script async src="https://cdn.jsdelivr.net/gh/opencv/opencv@4.x/dist/opencv.js"
+          onload="document.getElementById('status').textContent+=' ✅ OpenCV.js読み込み完了';"
+          onerror="alert('⚠️ OpenCV.jsの読み込みに失敗しました。再読み込みしてください。');">
+  </script>
 
-loadModel();
+  <script>
+    const MODEL_URL = "https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/";  // ← あなたのモデルURLに置き換え
+    let tmModel;
 
-// ===== 画像読み込み =====
-fileInput.addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file || !tmModel) return;
-  const img = new Image();
-  img.onload = async () => {
-    // Canvasに描画
-    canvas.width = img.width;
-    canvas.height = img.height;
-    ctx.drawImage(img, 0, 0, img.width, img.height);
-    // 分割スキャン開始
-    await scanAndMark(img);
-  };
-  img.src = URL.createObjectURL(file);
-});
+    const statusEl = document.getElementById('status');
+    const fileInput = document.getElementById('file');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const resultEl = document.getElementById('result');
 
-// ===== スキャンして図形を検出 =====
-async function scanAndMark(imgEl) {
-  const boxSize = 64;   // チェックする小ブロックの大きさ
-  const stride = 32;    // 移動間隔（重なり）
-  const threshold = 0.8; // 図形っぽい確率のしきい値
-  const labelsColor = {
-    "丸": "blue",
-    "四角": "green",
-    "三角": "red"
-  };
-
-  const tempCanvas = document.createElement("canvas");
-  const tempCtx = tempCanvas.getContext("2d");
-  tempCanvas.width = imgEl.width;
-  tempCanvas.height = imgEl.height;
-
-  const boxes = [];
-
-  for (let y = 0; y < imgEl.height - boxSize; y += stride) {
-    for (let x = 0; x < imgEl.width - boxSize; x += stride) {
-      tempCtx.drawImage(imgEl, x, y, boxSize, boxSize, 0, 0, boxSize, boxSize);
-      const prediction = await tmModel.predict(tempCanvas);
-      prediction.sort((a, b) => b.probability - a.probability);
-      const best = prediction[0];
-      if (best.className !== "なし" && best.probability > threshold) {
-        boxes.push({ x, y, label: best.className, conf: best.probability });
+    // ---- モデルを読み込む ----
+    async function loadModel() {
+      try {
+        const modelURL = MODEL_URL + "model.json";
+        const metadataURL = MODEL_URL + "metadata.json";
+        tmModel = await tmImage.load(modelURL, metadataURL);
+        statusEl.textContent = "✅ モデル読み込み完了！画像を選んでください。";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "❌ モデル読み込み失敗：URLやネットワークを確認してください。";
       }
     }
-  }
 
-  // 枠を描画
-  boxes.forEach(b => {
-    ctx.strokeStyle = labelsColor[b.label] || "yellow";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(b.x, b.y, boxSize, boxSize);
-    ctx.fillStyle = labelsColor[b.label];
-    ctx.font = "16px sans-serif";
-    ctx.fillText(`${b.label} (${(b.conf*100).toFixed(0)}%)`, b.x + 4, b.y + 20);
-  });
+    loadModel();
 
-  statusEl.textContent = `🔍 検出完了！ 検出数：${boxes.length}`;
-}
-</script>
+    // ---- ファイル選択時 ----
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file || !tmModel) return;
+
+      const img = new Image();
+      img.onload = async () => {
+        // Canvasに描画
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        // TMモデルで推論
+        const prediction = await tmModel.predict(img);
+        prediction.sort((a, b) => b.probability - a.probability);
+        const top = prediction[0];
+
+        resultEl.innerHTML = `🔍 結果：<b>${top.className}</b>（確率 ${(top.probability*100).toFixed(1)}%）`;
+
+        // OpenCVで囲みを描画（もし形があれば）
+        if (typeof cv !== 'undefined') {
+          const src = cv.imread(canvas);
+          const gray = new cv.Mat();
+          cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+          cv.threshold(gray, gray, 120, 255, cv.THRESH_BINARY);
+          const contours = new cv.MatVector();
+          const hierarchy = new cv.Mat();
+          cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+          for (let i = 0; i < contours.size(); ++i) {
+            const color = new cv.Scalar(0, 255, 0, 255);
+            cv.drawContours(src, contours, i, color, 2, cv.LINE_8, hierarchy, 100);
+          }
+          cv.imshow(canvas, src);
+          src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+        }
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  </script>
 </body>
 </html>
-
