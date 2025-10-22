@@ -33,9 +33,15 @@ const statusEl = document.getElementById("status");
 async function loadModel() {
   const modelURL = MODEL_URL + "model.json";
   const metadataURL = MODEL_URL + "metadata.json";
-  tmModel = await tmImage.load(modelURL, metadataURL);
-  statusEl.textContent = "✅ モデル読み込み完了！画像を選んでください。";
+  try {
+    tmModel = await tmImage.load(modelURL, metadataURL);
+    statusEl.textContent = "✅ モデル読み込み完了！画像を選んでください。";
+  } catch (err) {
+    statusEl.textContent = "❌ モデルの読み込みに失敗しました。URLを確認してください。";
+    console.error(err);
+  }
 }
+
 loadModel();
 
 // ===== 画像読み込み =====
@@ -99,3 +105,4 @@ async function scanAndMark(imgEl) {
 </script>
 </body>
 </html>
+
