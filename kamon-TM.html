@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>AI図形検出（丸・四角・三角）</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; text-align: center; }
+  canvas { border: 1px solid #ccc; max-width: 90%; height: auto; margin-top: 10px; }
+  #status { font-weight: bold; margin: 10px 0; }
+</style>
+</head>
+<body>
+<h1>🔵 AIで図形を検出！</h1>
+<p>Teachable Machineで学習した「丸・四角・三角・なし」モデルを使って、画像中の図形を自動でマークします。</p>
+
+<p id="status">⏳ モデル読み込み中...</p>
+<input type="file" id="file" accept="image/*"><br>
+<canvas id="canvas"></canvas>
+
+<!-- TensorFlow.js & Teachable Machine -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image"></script>
+
+<script>
+const MODEL_URL = "https://teachablemachine.withgoogle.com/models/JssL1cK-Y/"; // ←ここを自分のURLに！
+let tmModel;
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const fileInput = document.getElementById("file");
+const statusEl = document.getElementById("status");
+
+// ===== モデル読み込み =====
+async function loadModel() {
+  const modelURL = MODEL_URL + "model.json";
+  const metadataURL = MODEL_URL + "metadata.json";
+  tmModel = await tmImage.load(modelURL, metadataURL);
+  statusEl.textContent = "✅ モデル読み込み完了！画像を選んでください。";
+}
+loadModel();
+
+// ===== 画像読み込み =====
+fileInput.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file || !tmModel) return;
+  const img = new Image();
+  img.onload = async () => {
+    // Canvasに描画
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0, img.width, img.height);
+    // 分割スキャン開始
+    await scanAndMark(img);
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+// ===== スキャンして図形を検出 =====
+async function scanAndMark(imgEl) {
+  const boxSize = 64;   // チェックする小ブロックの大きさ
+  const stride = 32;    // 移動間隔（重なり）
+  const threshold = 0.8; // 図形っぽい確率のしきい値
+  const labelsColor = {
+    "丸": "blue",
+    "四角": "green",
+    "三角": "red"
+  };
+
+  const tempCanvas = document.createElement("canvas");
+  const tempCtx = tempCanvas.getContext("2d");
+  tempCanvas.width = imgEl.width;
+  tempCanvas.height = imgEl.height;
+
+  const boxes = [];
+
+  for (let y = 0; y < imgEl.height - boxSize; y += stride) {
+    for (let x = 0; x < imgEl.width - boxSize; x += stride) {
+      tempCtx.drawImage(imgEl, x, y, boxSize, boxSize, 0, 0, boxSize, boxSize);
+      const prediction = await tmModel.predict(tempCanvas);
+      prediction.sort((a, b) => b.probability - a.probability);
+      const best = prediction[0];
+      if (best.className !== "なし" && best.probability > threshold) {
+        boxes.push({ x, y, label: best.className, conf: best.probability });
+      }
+    }
+  }
+
+  // 枠を描画
+  boxes.forEach(b => {
+    ctx.strokeStyle = labelsColor[b.label] || "yellow";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x, b.y, boxSize, boxSize);
+    ctx.fillStyle = labelsColor[b.label];
+    ctx.font = "16px sans-serif";
+    ctx.fillText(`${b.label} (${(b.conf*100).toFixed(0)}%)`, b.x + 4, b.y + 20);
+  });
+
+  statusEl.textContent = `🔍 検出完了！ 検出数：${boxes.length}`;
+}
+</script>
+</body>
+</html>
