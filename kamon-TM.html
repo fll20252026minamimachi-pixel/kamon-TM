@@ -23,17 +23,19 @@
   <canvas id="canvas"></canvas>
   <div class="result" id="result"></div>
 
-  <!-- ✅ TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+ <!-- TensorFlow.js -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
 
-  <!-- ✅ Teachable Machine（ブラウザ用dist版） -->
-  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+<!-- Teachable Machine -->
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
 
-  <!-- ✅ OpenCV.js（optional、読み込み可視化つき） -->
-  <script async src="https://cdn.jsdelivr.net/gh/opencv/opencv@4.x/dist/opencv.js"
-          onload="document.getElementById('status').textContent+=' ✅ OpenCV.js読み込み完了';"
-          onerror="alert('⚠️ OpenCV.jsの読み込みに失敗しました。再読み込みしてください。');">
-  </script>
+<!-- OpenCV.js（安定CDN＋確認付き） -->
+<script async 
+  src="https://docs.opencv.org/4.x/opencv.js"
+  onload="document.getElementById('status').textContent += ' ✅ OpenCV.js読み込み成功';"
+  onerror="alert('⚠️ OpenCV.jsの読み込みに失敗しました。もう一度再読み込みしてください。');">
+</script>
+
 
   <script>
     const MODEL_URL = "https://teachablemachine.withgoogle.com/models/JssL1cK-Y/";  // ← あなたのモデルURLに置き換え
@@ -101,4 +103,5 @@
   </script>
 </body>
 </html>
+
 
