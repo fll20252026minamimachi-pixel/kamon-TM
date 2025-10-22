@@ -82,26 +82,73 @@
         resultEl.innerHTML = `🔍 結果：<b>${top.className}</b>（確率 ${(top.probability*100).toFixed(1)}%）`;
 
         // OpenCVで囲みを描画（もし形があれば）
-        if (typeof cv !== 'undefined') {
-          const src = cv.imread(canvas);
-          const gray = new cv.Mat();
-          cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-          cv.threshold(gray, gray, 120, 255, cv.THRESH_BINARY);
-          const contours = new cv.MatVector();
-          const hierarchy = new cv.Mat();
-          cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-          for (let i = 0; i < contours.size(); ++i) {
-            const color = new cv.Scalar(0, 255, 0, 255);
-            cv.drawContours(src, contours, i, color, 2, cv.LINE_8, hierarchy, 100);
-          }
-          cv.imshow(canvas, src);
-          src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
-        }
+        // OpenCVで囲みを描画（外枠は除外）
+if (typeof cv !== 'undefined') {
+  const src = cv.imread(canvas);
+  const gray = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+  // 線が黒・背景が白の画像が多いなら “線を白” にする方が輪郭が取りやすい
+  // 必要に応じて THRESH_BINARY に戻してください
+  cv.threshold(gray, gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+  // ノイズ除去（細かい点を消す）
+  const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+  cv.morphologyEx(gray, gray, cv.MORPH_OPEN, kernel);
+  kernel.delete();
+
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+  cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+  const W = src.cols, H = src.rows;
+  const MIN_AREA  = 400;      // 小さすぎるゴミを除外
+  const MAX_FRAC  = 0.90;     // 画像面積の90%を超える巨大輪郭は除外
+  const EDGE_MGN  = 2;        // 端から2px以内に触れていたら外枠とみなす
+
+  let vis = src.clone();
+
+  for (let i = 0; i < contours.size(); ++i) {
+    const cnt = contours.get(i);
+    const area = cv.contourArea(cnt);
+    if (area < MIN_AREA) { cnt.delete(); continue; }
+
+    const r = cv.boundingRect(cnt);
+
+    const touchesEdge =
+      r.x <= EDGE_MGN ||
+      r.y <= EDGE_MGN ||
+      (r.x + r.width)  >= (W - EDGE_MGN) ||
+      (r.y + r.height) >= (H - EDGE_MGN);
+
+    const isHuge = area > MAX_FRAC * W * H;
+
+    // ★ 外枠・端接触・巨大輪郭はスキップ
+    if (touchesEdge || isHuge) { cnt.delete(); continue; }
+
+    // ここから可視化（必要に応じて色を変えてOK）
+    cv.rectangle(
+      vis,
+      new cv.Point(r.x, r.y),
+      new cv.Point(r.x + r.width, r.y + r.height),
+      new cv.Scalar(0, 255, 0, 255),
+      2
+    );
+
+    cnt.delete();
+  }
+
+  cv.imshow(canvas, vis);
+  vis.delete();
+  src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+}
+
       };
       img.src = URL.createObjectURL(file);
     });
   </script>
 </body>
 </html>
+
 
 
